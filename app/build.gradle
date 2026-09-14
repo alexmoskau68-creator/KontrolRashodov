@@ -7,14 +7,30 @@ android {
         applicationId 'ru.controlexpenses'
         minSdk 26
         targetSdk 35
-        versionCode 1
-        versionName '1.0'
+        versionCode 2
+        versionName '1.1'
     }
 }
+
+def tessDir = file("src/main/assets/tessdata")
+tasks.register("prepareTessdata") {
+    outputs.dir(tessDir)
+    doLast {
+        tessDir.mkdirs()
+        [["rus.traineddata","https://raw.githubusercontent.com/tesseract-ocr/tessdata_fast/main/rus.traineddata"],
+         ["eng.traineddata","https://raw.githubusercontent.com/tesseract-ocr/tessdata_fast/main/eng.traineddata"]].each { pair ->
+            def out = new File(tessDir, pair[0])
+            if (!out.exists() || out.length() < 100000) {
+                new URL(pair[1]).withInputStream { i -> out.withOutputStream { it << i } }
+            }
+        }
+    }
+}
+preBuild.dependsOn prepareTessdata
 
 dependencies {
     implementation 'androidx.core:core:1.15.0'
     implementation 'androidx.appcompat:appcompat:1.7.0'
     implementation 'com.google.android.material:material:1.12.0'
-    implementation 'com.google.mlkit:text-recognition:16.0.1'
+    implementation 'com.github.adaptech-cz.Tesseract4Android:tesseract4android:4.8.0'
 }
