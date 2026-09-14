@@ -8,7 +8,6 @@ import android.graphics.BitmapFactory;
 import android.net.Uri;
 import android.os.Bundle;
 import android.view.Gravity;
-import android.view.View;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.ImageView;
@@ -17,7 +16,6 @@ import android.widget.ScrollView;
 import android.widget.Spinner;
 import android.widget.ArrayAdapter;
 import android.widget.TextView;
-import android.widget.Toast;
 
 import com.googlecode.tesseract.android.TessBaseAPI;
 
@@ -93,8 +91,7 @@ public class ReceiptActivity extends Activity {
         content.addView(shopEdit);
         content.addView(dateEdit);
 
-        TextView currencyLabel = text("Валюта покупки", 14, true);
-        content.addView(currencyLabel);
+        content.addView(text("Валюта покупки", 14, true));
         currencySpinner = new Spinner(this);
         currencySpinner.setAdapter(new ArrayAdapter<>(this, android.R.layout.simple_spinner_dropdown_item, currencies));
         content.addView(currencySpinner);
@@ -131,6 +128,7 @@ public class ReceiptActivity extends Activity {
         if (imageUri == null) return;
         status.setText("Распознаю русский текст…");
         new Thread(() -> {
+            TessBaseAPI api = null;
             try {
                 File base = new File(getFilesDir(), "tesseract");
                 File tessdata = new File(base, "tessdata");
@@ -143,14 +141,16 @@ public class ReceiptActivity extends Activity {
                     bitmap = BitmapFactory.decodeStream(in);
                 }
 
-                TessBaseAPI api = new TessBaseAPI();
+                api = new TessBaseAPI();
                 if (!api.init(base.getAbsolutePath(), "rus+eng")) throw new Exception("OCR не запустился");
                 api.setPageSegMode(TessBaseAPI.PageSegMode.PSM_AUTO);
                 api.setImage(bitmap);
                 String raw = api.getUTF8Text();
-                api.end();
+                api.recycle();
+                api = null;
                 runOnUiThread(() -> parseReceipt(raw == null ? "" : raw));
             } catch (Exception e) {
+                if (api != null) api.recycle();
                 runOnUiThread(() -> status.setText("Ошибка OCR: " + e.getMessage()));
             }
         }).start();
@@ -178,16 +178,13 @@ public class ReceiptActivity extends Activity {
         for (String source : lines) {
             String line = source.trim().replaceAll("\\s{2,}", " ");
             if (line.length() < 3 || skip(line)) continue;
-
             Matcher calc = calcPattern.matcher(line);
             if (calc.matches()) {
                 addItem(calc.group(1), number(calc.group(4)));
                 continue;
             }
             Matcher paid = paidPattern.matcher(line);
-            if (paid.matches() && hasLetters(paid.group(1))) {
-                addItem(paid.group(1), number(paid.group(2)));
-            }
+            if (paid.matches() && hasLetters(paid.group(1))) addItem(paid.group(1), number(paid.group(2)));
         }
 
         status.setText("Распознано позиций: " + items.size() + ". Проверьте данные перед сохранением.");
@@ -210,9 +207,6 @@ public class ReceiptActivity extends Activity {
             row.setBackgroundColor(0xffffffff);
             EditText name = field("Товар", item.name);
             EditText paid = field("Фактически уплачено", format(item.paid));
-            int index = i;
-            name.setOnFocusChangeListener((v, f) -> { if (!f) items.get(index).name = name.getText().toString(); });
-            paid.setOnFocusChangeListener((v, f) -> { if (!f) items.get(index).paid = number(paid.getText().toString()); });
             row.addView(name);
             row.addView(paid);
             itemsBox.addView(row);
